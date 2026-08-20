@@ -1,0 +1,616 @@
+---
+title: "Predicting Trends in HIV Diagnoses"
+author: "Alexis Alfaro Naranjo"
+date: "2026-04-01"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message = FALSE, warning = FALSE, include=FALSE}
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(forecast)
+library(tseries)
+library(randomForest)
+library(Metrics)
+library(knitr)
+library(kableExtra)
+library(tidyr)
+```
+
+
+# Project Goal
+
+The objective of this project is to analyze and predict trends in HIV Diagnoses in the United States by using traditional statistical forecasting and time-series modeling techniques. For the purpose of this project, I will be applying linear regression, exponential smoothing (ETS), and ARIMA models. This project evaluates predictive performance and explores demographic subgroup trends using CDC surveillance data.
+
+
+# Abstract
+
+This project analyzes HIV diagnosis trends in the United States utilizing statistical forecasting and time-series modeling techniques. The data was obtained from the Centers for Disease Control and Prevention (CDC) HIV Surveillance Report and included annual HIV diagnoses from 2019 through 2023. The main objective of this project is to analyze recent HIV diagnoses trends and generate forecasts of the future diagnoses using surveillance data. Linear regression, exponential smoothing (ETS), and Auto Regressive Integrated Moving Average (ARIMA) models were applied in order to evaluate patterns in the data and produce forecasts for future years. Model performance was assessed using Root Mean Squared Error (RMSE) to determine how well each approach fit the observed data. Results indicated an overall increase in HIV diagnoses following a decline in 2020, with linear regression providing the strongest predictive performance among the models considered. Additional subgroup analysis by sex showed that diagnoses remained substantially higher among males than females throughout the study period, although both groups experience similar relative increases between 2019 and 2023. Overall, the findings demonstrate how statistical forecasting methods can be used to analyze and predict HIV diagnoses trends and provide insight into patterns that may be useful for public health planning and future research. 
+
+
+# Introduction
+Human Immunodeficiency Virus (HIV) is still a major public health concern in the United States and continues to affect diverse populations across age, sex, and demographic groups. Monitoring HIV diagnoses over time is important for understanding disease patterns, evaluating healthcare trends, and identifying areas where prevention and treatment efforts may be improved. Statistical forecasting methods can help analyze historical diagnosis trends and provide insight into future changes in disease occurrence. 
+
+This project utilizes data from the Centers for Disease Control and Prevention (CDC) HIV Surveillance Report in order to analyze HIV diagnoses trends in the United States. Several statistical forecasting and time-series modeling techniques, such as linear regression, exponential smoothing (ETS), and ARIMA models, were used to evaluate predictive performance. Model accuracy was compared using Root Mean Squared Error (RMSE). In addition to forecasting overall HIV diagnoses trends, subgroup analysis by sex was conducted to provide further public health context and evaluate demographic differences over time. 
+
+
+Overall, this project demonstrates how statistical forecasting methods can be applied to public health data in order to better understand HIV diagnoses trends and compare predictive modeling approaches. 
+
+
+
+# Section 1: Data Collection and Cleaning
+
+## Data Collection and Cleaning
+The dataset used in this project was obtained from the Centers for Disease Control and Prevention (CDC) HIV Surveillance Report. The data included annual HIV diagnoses in the United States from 2019 to 2023, along with subgroup demographic information such as sex. Relevant diagnosis counts were extracted from the Excel tables and organized into structured format for analysis. Data cleaning included converting variables into numeric format, removing unnecessary formatting, and reshaping subgroup data for visualization and comparison. 
+
+# Data 
+```{r, echo = FALSE}
+hiv <- read_excel("hiv_Diagnosis.xlsx")
+```
+# Cleaning the Data
+
+```{r, echo = FALSE}
+hiv_clean <- data.frame(
+  Year = c(2019, 2020, 2021, 2022, 2023),
+  Diagnosis = c(29518, 25015, 29273, 30734, 31500)
+  
+)
+hiv_clean
+
+hiv <- hiv_clean
+
+hiv <- hiv %>%
+  rename(
+    Year = Year,
+    Diagnosis = Diagnosis
+  ) %>%
+  mutate(
+    Year = as.numeric(Year), 
+    Diagnosis = as.numeric(Diagnosis)
+  ) %>%
+  arrange(Year) %>%
+  filter(!is.na(Year), !is.na(Diagnosis))
+```
+
+
+# Section 2: Exploratory Data Analysis
+
+```{r, echo = FALSE}
+ggplot(hiv, aes(x = Year, y = Diagnosis)) +
+  geom_line() +
+  geom_point() + 
+  labs(
+    title = "HIV Diagnoses Over Time",
+    x = "Year",
+    y = "Diagnosis"
+  ) +
+  theme_minimal()
+```
+The plot demonstrates a decline in diagnoses during 2020, followed by an increase in 2023. This pattern is likely due to disruptions in healthcare access and diagnosis reporting during the COVID-19 pandemic, followed by recovery in the following years. 
+
+
+# Section 3: Forecasting Models
+
+
+## 3.1 Linear Regression
+### Baseline Linear Regression Model 
+
+```{r, echo = FALSE}
+lm_model <- lm(Diagnosis ~ Year, data = hiv)
+
+coef_table <- summary(lm_model)$coefficients
+
+kable(
+  coef_table,
+  caption = "Linear Regression Coefficients",
+  digits = 2
+)
+
+```
+
+# Predicted Values
+
+```{r, echo = FALSE}
+hiv$Predicted <- predict(lm_model, newdata = hiv)
+
+hiv
+```
+
+# RMSE
+
+```{r, echo = FALSE}
+rmse_lm <- sqrt(mean((hiv$Diagnosis - hiv$Predicted)^2))
+
+rmse_lm
+```
+The Root Mean Squared Error (RMSE) of the baseline linear regression model was calculated in order to evaluate predictive accuracy. RMSE measures the average size of prediction errors in the same units as the response variable. Having a lower RMSE indicated better predictive performance. This value will later be used to compare the linear regression model against more advanced forecasting and machine learning models. The positive slope indicates an overall upward trend in HIV diagnoses during the study period. Although annual fluctuations are present, the model suggests a gradual increase in diagnoses over time. 
+
+
+
+# Actual vs Predicted Plot
+```{r, echo = FALSE}
+ggplot(hiv, aes(x=Year)) +
+  geom_line(aes(y=Diagnosis), linewidth = 1) +
+  geom_point(aes(y=Diagnosis), size = 2) +
+  geom_line(aes(y = Predicted), linetype = "dashed", linewidth =1) +
+  labs(
+    title = "Observed vs Predicted HIV Diagnoses",
+    x = "Year", 
+    y = "Diagnosis"
+  ) +
+  theme_minimal()
+```
+
+The observed versus predicted plot above compares the actual HIV diagnoses counts to the fitted values from the linear regression model. The dashed fitted line follows an upward trend in Diagnosis after the year 2020, while simultaneously showing some deviation due to fluctuations each year. Therefore, this suggests that a simple linear trend shows only part of an overall pattern, however more flexible models may improve predictive accuracy. 
+
+
+# Forecast for Future Year
+
+```{r, echo = FALSE}
+data_future <- data.frame(Year = c(2024, 2025))
+
+lm_forecast <- data.frame(
+  Year = c(2024, 2025),
+  Forecast = predict(lm_model, newdata = data_future)
+)
+
+kable(lm_forecast, caption = "Linear Regression Forecasts", digits = 2)
+```
+## 3.2 ETS Model
+
+### Exponential Smoothing
+```{r, echo = FALSE}
+hiv <- data.frame(
+  Year = c(2019, 2020, 2021, 2022, 2023),
+  Diagnosis = c(29518, 25015, 29273, 30734, 31500)
+)
+
+hiv_ts <- ts(hiv$Diagnosis, start = 2019, frequency = 1)
+
+ets_model <- ets(hiv_ts)
+
+ets_model
+
+ets_forecast <- forecast(ets_model, h = 2)
+
+ets_forecast
+plot(ets_forecast)
+```
+
+
+# RMSE for ETS
+
+```{r, echo = FALSE}
+ets_filled <- fitted(ets_model)
+
+rmse_ets <- sqrt(mean((hiv$Diagnosis - ets_filled)^2))
+
+rmse_ets
+```
+
+# Comparison table
+
+```{r, echo = FALSE}
+comparison <- data.frame(
+  Model = c("Linear Regression", "ETS"),
+  RMSE = c(rmse_lm, rmse_ets)
+)
+
+kable(comparison, caption = "RMSE Comparison Across Models", digits = 2)
+```
+
+The ETS forecasting model was added in order to compare an alternative time series approach with the baseline linear regression model. RMSE values were calculated for both methods in order to evaluate predictive accuracy. Comparing multiple forecasting approaches is useful for determining which model best captures HIV diagnosis trends over time. However, due to the limited sample size, results are preliminary and additional years of data will likely improve model stability. 
+
+
+
+## 3.3 ARIMA Model
+
+```{r, echo = FALSE}
+library(forecast)
+
+arima_model <- auto.arima(hiv_ts)
+
+arima_model
+```
+The ARIMA model that was selected is ARIMA(0,0,0) with mean that is non zero. This shows that the model does not detect significant autoregressive or trend components in the data and instead it estimates a constant mean level for HIV Diagnosis over time. This is likely due to the limited number of observations in the dataset. This keeps the model from capturing more complex temporal patterns. 
+
+
+# Forecasting future values
+
+```{r, echo = FALSE}
+arima_forecast <- forecast(arima_model, h = 2)
+
+
+arima_forecast
+plot(arima_forecast)
+```
+The ARIMA forecast creates relatively stable predictions for future HIV Diagnosis, therefore reflecting the model's reliance on the overall mean of the data. The forecast intervals are also wide. This indicates the uncertainty in future predictions. The ARIMA model provides a baseline forecast, whereas additional data would be necessary to improve predictive accuracy. 
+
+
+# RMSE for ARIMA
+```{r, echo = FALSE}
+arima_fitted <- fitted(arima_model)
+
+rmse_arima <- sqrt(mean((hiv$Diagnosis - arima_fitted)^2))
+
+rmse_arima
+```
+# Section 4
+
+## Comparison Table
+```{r, echo = FALSE}
+comparison <- data.frame(
+  Model = c("Linear Regression", "ETS", "ARIMA"),
+  RMSE = c(rmse_lm, rmse_ets, rmse_arima)
+)
+
+kable(comparison, caption = "RMSE Comparison Across Forecasting Models", digits = 2)
+```
+The comparison of RMSE values across the three models indicated that the linear regression model achieved the lowest error, followed by ARIMA and ETS. A simple linear trend provides the best fit among the forecasting models considered. 
+
+# Section 5: Demographic Subgroup Analysis
+
+```{r, echo = FALSE}
+hiv_raw <- read_excel("hiv_diagnosis.xlsx", sheet = "Table 1a", col_names = FALSE)
+head(hiv_raw)
+```
+
+```{r, echo = FALSE}
+hiv_sex <- data.frame(
+  Sex = c("Male", "Female"),
+  
+  '2019' = c(
+    as.numeric(hiv_raw[[2]][5]),
+    as.numeric(hiv_raw[[2]][6])
+  ),
+  
+  '2020' = c(
+    as.numeric(hiv_raw[[4]][5]),
+    as.numeric(hiv_raw[[4]][6])
+  ),
+  
+  '2021' = c(
+    as.numeric(hiv_raw[[6]][5]),
+    as.numeric(hiv_raw[[6]][6])
+  ),
+  
+  '2022' = c(
+    as.numeric(hiv_raw[[8]][5]),
+    as.numeric(hiv_raw[[8]][6])
+  ),
+  
+  '2023' = c(
+    as.numeric(hiv_raw[[10]][5]),
+    as.numeric(hiv_raw[[10]][6])
+  )
+)
+
+hiv_sex
+```
+
+
+```{r, echo = FALSE}
+hiv_sex_long <- hiv_sex %>%
+  pivot_longer(
+    cols = c('X2019', 'X2020', 'X2021', 'X2022', 'X2023'),
+    names_to = "Year", 
+    values_to = "Diagnoses"
+  )%>%
+  mutate(
+    Year = gsub("X", "", Year),
+    Year = as.numeric(Year),
+    Diagnoses = as.numeric(Diagnoses)
+  )
+
+hiv_sex_long
+```
+
+```{r, echo = FALSE}
+hiv_sex_long <- hiv_sex_long %>%
+  mutate(
+    Diagnoses = gsub(",", "", Diagnoses),
+    Diagnoses = trimws(Diagnoses),
+    Diagnoses = as.numeric(Diagnoses)
+  )
+
+
+
+ggplot(hiv_sex_long,
+       aes(x = Year,
+           y = Diagnoses,
+           color = Sex)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  labs(
+    title = "HIV Diagnoses by Sex, 2019-2023",
+    x = "Year",
+    y = "Diagnoses"
+  )+
+  theme_minimal()
+```
+
+
+The demographic comparison plot shows that HIV diagnoses remained substantially higher among males than females throughout the study period. Both groups experienced a decline during 2020, followed by increasing diagnoses in later years. This suggests that the COVID-19 pandemic may have temporarily affected diagnosis patterns across populations. The inclusion of subgroup analysis provides additional public health context and expands the project beyond overall trend forecasting.
+
+```{r, echo = FALSE}
+sex_change <- hiv_sex_long %>%
+  filter(Year %in% c(2019, 2023)) %>%
+  pivot_wider(
+    names_from = Year,
+    values_from = Diagnoses
+  ) %>%
+  mutate(
+    Percent_Change = ((`2023` - `2019`) / `2019`) *100
+    
+  
+  )
+
+kable(sex_change, caption = "Percent Change in HIV Diagnoses by Sex, 2019-2023", digits = 2)
+```
+
+The percent change analysis demonstrates that HIV diagnoses increased by approximately 6.7% for both males and females between 2019 and 2023. While males have consistently had higher diagnosis counts overall, the relative increase over time was similar across both groups. This provides additional insight into subgroup trends and helps compare changes in HIV diagnoses beyond raw counts alone. 
+
+
+
+# Section 6: Discussion and Conclusion
+
+The results of this project demonstrate that statistical forecasting and time-series modeling techniques can be effectively applied to analyze HIV diagnoses trends in public health data. Among the models considered, linear regression produced the lowest RMSE and showed the strongest predictive performance for the data set. ETS and ARIMA models were useful for comparison. However, their predictive performance was likely limited by the small number of observations available. Additionally, demographic subgroup analysis by sex provided further public health context by showing similar relative increases in HIV diagnoses among males and females between 2019 and 2023. Future work could incorporate additional years of CDC HIV surveillance data in order to improve model stability and forecasting accuracy. 
+
+
+# References
+
+ Centers for Disease Control and Prevention (CDC). HIV surveillance Report, 2023
+
+Munday, et al. (2025). Forecasting the spatial spread of an Ebola epidemic in Real Time: COmparing predictions of mathematical models and experts. eLife
+
+
+# Appendix
+
+## Appendix A: Data Preparation and Cleaning
+
+The CDC HIV Surveillance Report data was imported into R and cleaned prior to analysis. Data preparation included selecting relevant variables, converting diagnosis counts into numeric format, and organizing the data into a structure suitable for visualization and forecasting analyses. 
+
+```r
+hiv <- read_excel("hiv_Diagnosis.xlsx")
+```
+
+### Cleaning the Data
+```r
+hiv_clean <- data.frame(
+Year = c(2019, 2020, 2021, 2022, 2023),
+Diagnosis = c(29518, 25015, 29273, 30734, 31500)
+)
+hiv_clean
+```
+
+# Appendix B: Exploratory Data Analysis
+
+The following code was used to create the exploratory plot of HIV diagnoses over time. 
+
+```r
+ggplot(hiv, aes(x = Year, y = Diagnosis)) +
+geom_line() +
+geom_point() +
+labs(
+title = "HIV Diagnoses Over Time",
+x = "Year",
+y = "Diagnosis"
+) +
+theme_minimal()
+
+```
+
+
+
+## Appendix C: Forecasting Model Code
+
+The following code was used to fit the linear regression, ETS, and ARIMA forecasting models. 
+
+
+### Linear Regression
+
+A simple linear regression model was fit using year as the predictor variable and HIV diagnosis as the reponse variable.
+
+
+```r
+lm_model <- lm(Diagnosis ~ Year, data = hiv)
+coef_table <- summary(lm_model)$coefficients
+kable(
+coef_table,
+caption = "Linear Regression Coefficients",
+digits = 2
+)
+```
+### Predicted Values
+
+```r
+hiv$Predicted <- predict(lm_model, newdata = hiv)
+hiv
+```
+
+
+
+### RMSE
+
+```r
+rmse_lm <- sqrt(mean((hiv$Diagnosis- hiv$Predicted)ˆ2))
+rmse_lm
+```
+
+
+### Actual vs Predicted Plot
+
+```r
+ggplot(hiv, aes(x=Year)) +
+geom_line(aes(y=Diagnosis), linewidth = 1) +
+geom_point(aes(y=Diagnosis), size = 2) +
+geom_line(aes(y = Predicted), linetype = "dashed", linewidth =1) +
+labs(
+title = "Observed vs Predicted HIV Diagnoses",
+x = "Year",
+y = "Diagnosis"
+) +
+theme_minimal()
+```
+
+### Forecast for Future Year
+
+```r
+data_future <- data.frame(Year = c(2024, 2025))
+lm_forecast <- data.frame(
+Year = c(2024, 2025),
+Forecast = predict(lm_model, newdata = data_future)
+)
+kable(lm_forecast, caption = "Linear Regression Forecasts", digits = 2)
+```
+
+
+### ETS Model Code
+
+```r
+hiv <- data.frame(
+Year = c(2019, 2020, 2021, 2022, 2023),
+Diagnosis = c(29518, 25015, 29273, 30734, 31500)
+)
+hiv_ts <- ts(hiv$Diagnosis, start = 2019, frequency = 1)
+ets_model <- ets(hiv_ts)
+ets_model
+
+
+ets_forecast <- forecast(ets_model, h = 2)
+ets_forecast
+
+plot(ets_forecast)
+```
+
+
+### ARIMA Model Code 
+
+```r
+library(forecast)
+arima_model <- auto.arima(hiv_ts)
+arima_model
+```
+
+
+### Forecasting Future Values
+
+```r
+arima_forecast <- forecast(arima_model, h = 2)
+arima_forecast
+
+
+plot(arima_forecast)
+```
+
+
+
+### RMSE for ARIMA
+
+```r
+arima_fitted <- fitted(arima_model)
+
+rmse_arima <- sqrt(mean((hiv$Diagnosis- arima_fitted)ˆ2))
+
+rmse_arima
+```
+
+
+## Appendix D: Demographic Subgroup Analysis
+
+```r
+comparison <- data.frame(
+  Model = c("Linear Regression", "ETS", "ARIMA"),
+  RMSE = c(rmse_lm, rmse_ets, rmse_arima)
+)
+
+
+kable(comparison, caption = "RMSE Comparison Across Forecasting Models", digits = 2)
+```
+
+
+```r
+hiv_sex<-data.frame(
+Sex=c("Male","Female"),
+'2019'=c(
+as.numeric(hiv_raw[[2]][5]),
+as.numeric(hiv_raw[[2]][6])
+),
+'2020'=c(
+as.numeric(hiv_raw[[4]][5]),
+as.numeric(hiv_raw[[4]][6])
+),
+'2021'=c(
+as.numeric(hiv_raw[[6]][5]),
+as.numeric(hiv_raw[[6]][6])
+),
+'2022'=c(
+as.numeric(hiv_raw[[8]][5]),
+as.numeric(hiv_raw[[8]][6])
+),
+'2023'=c(
+as.numeric(hiv_raw[[10]][5]),
+as.numeric(hiv_raw[[10]][6])
+)
+)
+hiv_sex
+
+```
+
+
+```r
+hiv_sex_long<-hiv_sex%>%
+pivot_longer(
+cols=c('X2019','X2020','X2021','X2022','X2023'),
+names_to="Year",
+values_to="Diagnoses"
+)%>%
+mutate(
+Year=gsub("X","",Year),
+Year=as.numeric(Year),
+Diagnoses=as.numeric(Diagnoses)
+)
+hiv_sex_long
+
+```
+
+```r
+hiv_sex_long <- hiv_sex_long %>%
+mutate(
+Diagnoses = gsub(",", "", Diagnoses),
+Diagnoses = trimws(Diagnoses),
+Diagnoses = as.numeric(Diagnoses)
+)
+ggplot(hiv_sex_long,
+aes(x = Year,
+y = Diagnoses,
+color = Sex)) +
+geom_line(linewidth = 1) +
+geom_point(size = 2) +
+labs(
+title = "HIV Diagnoses by Sex, 2019-2023",
+x = "Year",
+y = "Diagnoses"
+)+
+theme_minimal()
+```
+
+```r
+sex_change <- hiv_sex_long %>%
+filter(Year %in% c(2019, 2023)) %>%
+pivot_wider(
+names_from = Year,
+values_from = Diagnoses
+) %>%
+mutate(
+Percent_Change = ((`2023`- `2019`) / `2019`) *100
+)
+kable(sex_change, caption = "Percent Change in HIV Diagnoses by Sex, 2019-2023", digits = 2)
+
+```
+
