@@ -4,7 +4,7 @@
 
 This project analyzes trends in HIV diagnoses in the United States utilizing data from the CDC HIV Surveillance Report. 
 
-The analysis was completed as part of PSTAT 199 at the University of California, Santa Barbara. This was completed over the course of a 10 week quarter and was supervised by Dr. Holmes. 
+The analysis was completed as part of PSTAT 199 at the University of California, Santa Barbara. This project was completed during a 10-week academic quarter under the supervision of Dr. Holmes. 
 
 ## Tools
 
